@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" id="meta-theme" content="#1e1b4b" />
+  <meta name="description" content="ذاكرة Pocket – RPG Life Tracker, Task Manager &amp; Personal CRM" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ذاكرة" />
+  <title>ذاكرة Pocket</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { cairo: ['Cairo', 'sans-serif'] },
+          colors: {
+            brand: {
+              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe',
+              300: '#a5b4fc', 400: '#818cf8', 500: '#6366f1',
+              600: '#4f46e5', 700: '#4338ca', 800: '#3730a3', 900: '#312e81',
+            },
+          },
+          keyframes: {
+            slideUp:  { from:{transform:'translateY(100%)',opacity:0}, to:{transform:'translateY(0)',opacity:1} },
+            slideDown:{ from:{transform:'translateY(-20px)',opacity:0}, to:{transform:'translateY(0)',opacity:1} },
+            fadeIn:   { from:{opacity:0}, to:{opacity:1} },
+            pop:      { '0%':{transform:'scale(0.92)',opacity:0}, '100%':{transform:'scale(1)',opacity:1} },
+            xpFloat:  { '0%':{transform:'translateY(0) translateX(-50%)',opacity:1}, '100%':{transform:'translateY(-65px) translateX(-50%)',opacity:0} },
+          },
+          animation: {
+            'slide-up':   'slideUp 0.4s cubic-bezier(0.4,0,0.2,1)',
+            'slide-down': 'slideDown 0.3s ease',
+            'fade-in':    'fadeIn 0.25s ease',
+            'pop':        'pop 0.25s cubic-bezier(0.34,1.56,0.64,1)',
+            'xp-float':   'xpFloat 1.1s ease forwards',
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Cairo', sans-serif;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    ::-webkit-scrollbar { width: 3px; height: 3px; }
+    ::-webkit-scrollbar-thumb { background: #6366f1; border-radius: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+
+    .glass {
+      background: rgba(255,255,255,0.72);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(99,102,241,0.12);
+    }
+    .dark .glass {
+      background: rgba(15,10,40,0.72);
+      border: 1px solid rgba(99,102,241,0.18);
+    }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    .p-urgent { border-right: 3px solid #ef4444; }
+    .p-high   { border-right: 3px solid #f97316; }
+    .p-medium { border-right: 3px solid #eab308; }
+    .p-low    { border-right: 3px solid #22c55e; }
+
+    .stat-bar { transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
+
+    .xp-float {
+      position: fixed;
+      top: 35%;
+      left: 50%;
+      pointer-events: none;
+      z-index: 9999;
+      font-family: 'Cairo', sans-serif;
+      font-weight: 900;
+      font-size: 1.5rem;
+      color: #818cf8;
+      text-shadow: 0 2px 8px rgba(99,102,241,0.6);
+      animation: xpFloat 1.1s ease forwards;
+    }
+
+    .level-badge { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); }
+    .xp-glow { box-shadow: 0 0 20px rgba(99,102,241,0.25); }
+    .card { transition: transform 0.18s ease, box-shadow 0.18s ease; }
+    .card:active { transform: scale(0.98); }
+    .no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+    .no-scroll::-webkit-scrollbar { display: none; }
+    input, textarea, select { -webkit-appearance: none; appearance: none; }
+    select option { background: #1e1b4b; color: #fff; }
+    .modal-bg { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    .nav-active { transform: translateY(-3px); }
+    .kanban-col { min-height: 250px; }
+    .clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .toast-enter { animation: slideDown 0.3s ease; }
+  </style>
+</head>
+<body
+  class="bg-slate-100 dark:bg-gray-950 text-gray-900 dark:text-gray-100"
+  x-data="App()"
+  x-init="init()"
+>
+
+<!-- ████████  TOAST STACK  ████████ -->
+<div class="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2 w-11/12 max-w-sm pointer-events-none">
+  <template x-for="t in toasts" :key="t.id">
+    <div class="toast-enter glass rounded-2xl px-4 py-3 flex items-center gap-3 shadow-xl pointer-events-auto"
+         :class="{'text-emerald-500':t.type==='success','text-red-500':t.type==='error','text-brand-400':t.type==='info','text-amber-400':t.type==='warning'}">
+      <i class="fa-solid text-lg flex-shrink-0"
+         :class="{'fa-circle-check':t.type==='success','fa-circle-xmark':t.type==='error','fa-circle-info':t.type==='info','fa-triangle-exclamation':t.type==='warning'}"></i>
+      <span class="text-sm font-semibold flex-1" x-text="t.msg"></span>
+      <button @click="dismissToast(t.id)" class="opacity-60 hover:opacity-100 transition"><i class="fa-solid fa-xmark text-sm"></i></button>
+    </div>
+  </template>
+</div>
+
+<!-- ████████  INSTALL BANNER  ████████ -->
+<div x-show="showInstallBanner" x-transition class="fixed top-0 inset-x-0 z-[100] glass px-4 py-3 flex items-center justify-between shadow-lg">
+  <div class="flex items-center gap-3">
+    <span class="text-2xl">📲</span>
+    <div>
+      <p class="font-black text-sm">تثبيت ذاكرة Pocket</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400">أضف التطبيق لشاشتك الرئيسية</p>
+    </div>
+  </div>
+  <div class="flex gap-2 flex-shrink-0">
+    <button @click="installApp()" class="bg-brand-600 hover:bg-brand-700 text-white text-xs px-4 py-2 rounded-xl font-bold transition shadow">تثبيت</button>
+    <button @click="showInstallBanner=false" class="w-8 h-8 glass rounded-xl flex items-center justify-center text-gray-400"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+</div>
+
+<!-- ████████  APP SHELL  ████████ -->
+<div class="flex flex-col" style="height:100dvh;height:100vh;">
+
+  <!-- HEADER -->
+  <header class="glass sticky top-0 z-40 px-4 py-2.5 flex items-center justify-between flex-shrink-0">
+    <div class="flex items-center gap-2.5">
+      <div class="level-badge w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-xs shadow-lg flex-shrink-0">
+        L<span x-text="overallLevel"></span>
+      </div>
+      <div class="leading-tight">
+        <h1 class="text-sm font-black text-brand-600 dark:text-brand-400 leading-none">ذاكرة Pocket</h1>
+        <p class="text-xs text-gray-500 dark:text-gray-400" x-text="greeting"></p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <div class="hidden sm:flex items-center gap-1.5 glass rounded-full px-3 py-1.5">
+        <span class="text-xs text-brand-400 font-black" x-text="totalXP.toLocaleString()"></span>
+        <span class="text-xs text-gray-400">XP</span>
+      </div>
+      <button @click="toggleDark()" class="w-9 h-9 glass rounded-xl flex items-center justify-center text-brand-500 hover:scale-110 transition">
+        <i :class="darkMode ? 'fa-sun' : 'fa-moon'" class="fa-solid text-sm"></i>
+      </button>
+      <button @click="settingsOpen=true" class="w-9 h-9 glass rounded-xl flex items-center justify-center text-brand-500 hover:scale-110 transition">
+        <i class="fa-solid fa-gear text-sm"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- SCROLL AREA -->
+  <main class="flex-1 overflow-y-auto">
+
+    <!-- ══  HOME TAB  ══ -->
+    <div class="tab-pane pb-28 px-4 pt-4" :class="activeTab==='home' ? 'active' : ''">
+
+      <!-- Overall XP Card -->
+      <div class="glass rounded-3xl p-5 mb-5 xp-glow animate-fade-in">
+        <div class="flex items-start justify-between mb-4">
+          <div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase tracking-widest mb-1">المستوى الكلي</p>
+            <div class="flex items-end gap-2">
+              <h2 class="text-5xl font-black text-brand-500 leading-none" x-text="overallLevel"></h2>
+              <span class="text-lg font-bold text-brand-400 mb-1">Level</span>
+            </div>
+          </div>
+          <div class="text-left">
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">إجمالي XP</p>
+            <p class="text-2xl font-black text-brand-400" x-text="totalXP.toLocaleString()"></p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5" x-text="xpToNextOverall>0 ? xpToNextOverall.toLocaleString()+' للمستوى التالي' : '✨ الحد الأقصى'"></p>
+          </div>
+        </div>
+        <div class="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-3 overflow-hidden">
+          <div class="h-full bg-gradient-to-l from-brand-500 to-purple-500 rounded-full stat-bar xp-glow" :style="`width:${overallProgressPct}%`"></div>
+        </div>
+        <div class="flex justify-between text-xs text-gray-400 mt-1.5">
+          <span x-text="`${overallProgressPct}%`"></span>
+          <span x-text="'Level '+(overallLevel+1)"></span>
+        </div>
+      </div>
+
+      <!-- Stat Cards -->
+      <div class="space-y-3 mb-5">
+        <template x-for="stat in computedStats" :key="stat.key">
+          <div class="glass rounded-3xl p-4 card animate-pop">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-sm flex-shrink-0" :class="stat.bgClass" x-text="stat.icon"></div>
+                <div>
+                  <h3 class="font-black text-base leading-tight" x-text="stat.nameAr"></h3>
+                  <p class="text-xs text-gray-500 dark:text-gray-400" x-text="stat.nameEn"></p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <template x-if="stat.key === 'Patience'">
+                  <button @click="openPatienceModal()" class="w-9 h-9 bg-brand-600 hover:bg-brand-700 text-white rounded-xl flex items-center justify-center shadow-lg hover:scale-110 transition active:scale-95">
+                    <i class="fa-solid fa-plus text-sm"></i>
+                  </button>
+                </template>
+                <div class="text-center">
+                  <div class="level-badge text-white text-xs font-black px-2.5 py-1 rounded-xl shadow">Lv <span x-text="stat.level"></span></div>
+                  <p class="text-xs text-gray-400 mt-1 font-semibold" x-text="stat.xp+' XP'"></p>
+                </div>
+              </div>
+            </div>
+            <div class="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2.5 overflow-hidden">
+              <div class="h-full rounded-full stat-bar" :class="stat.barClass" :style="`width:${stat.progressPct}%`"></div>
+            </div>
+            <div class="flex justify-between text-xs text-gray-400 mt-1.5">
+              <span x-text="`${stat.xp.toLocaleString()} XP`"></span>
+              <span x-text="stat.xpNeeded>0 ? `${stat.xpNeeded.toLocaleString()} للمستوى ${stat.level+1}` : '✨ MAX'"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="glass rounded-3xl p-4 mb-4">
+        <h3 class="font-black text-sm mb-3 flex items-center gap-2">
+          <span class="w-7 h-7 bg-brand-100 dark:bg-brand-900/30 text-brand-600 rounded-lg flex items-center justify-center text-xs">⚡</span>
+          آخر الإنجازات
+        </h3>
+        <div x-show="recentActivity.length===0" class="text-center py-8 text-gray-400">
+          <p class="text-3xl mb-2">🚀</p>
+          <p class="text-sm font-semibold">لا توجد إنجازات بعد</p>
+          <p class="text-xs mt-1">أكمل مهامك لترى تقدمك هنا!</p>
+        </div>
+        <div class="space-y-2">
+          <template x-for="act in recentActivity.slice(0,6)" :key="act.id">
+            <div class="flex items-center gap-3 p-2.5 rounded-2xl bg-gray-100 dark:bg-gray-800/60">
+              <span class="text-xl flex-shrink-0" x-text="act.icon"></span>
+              <div class="flex-1 min-w-0">
+                <p class="text-xs font-bold truncate" x-text="act.title"></p>
+                <p class="text-xs text-gray-500 dark:text-gray-400" x-text="act.detail"></p>
+              </div>
+              <span class="text-xs font-black text-brand-400 flex-shrink-0" x-text="'+'+act.xp+' XP'"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="grid grid-cols-3 gap-3">
+        <div class="glass rounded-2xl p-3 text-center card">
+          <p class="text-3xl font-black text-emerald-400" x-text="tasks.filter(t=>t.completed).length"></p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">مهمة منجزة</p>
+        </div>
+        <div class="glass rounded-2xl p-3 text-center card">
+          <p class="text-3xl font-black text-amber-400" x-text="tasks.filter(t=>!t.completed).length"></p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">مهمة نشطة</p>
+        </div>
+        <div class="glass rounded-2xl p-3 text-center card">
+          <p class="text-3xl font-black text-purple-400" x-text="people.length"></p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">جهة اتصال</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══  PEOPLE TAB  ══ -->
+    <div class="tab-pane pb-28 px-4 pt-4" :class="activeTab==='people' ? 'active' : ''">
+
+      <div class="flex gap-2 mb-3">
+        <div class="flex-1 relative">
+          <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none"></i>
+          <input x-model="peopleSearch" type="search" placeholder="بحث عن شخص..." autocomplete="off"
+            class="w-full glass rounded-2xl py-3 pr-10 pl-4 text-sm outline-none placeholder:text-gray-400" />
+        </div>
+        <button @click="openPersonModal(null)"
+          class="bg-brand-600 hover:bg-brand-700 text-white w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition hover:scale-105 active:scale-95 flex-shrink-0">
+          <i class="fa-solid fa-plus text-lg"></i>
+        </button>
+      </div>
+
+      <div class="flex gap-2 no-scroll overflow-x-auto mb-4 pb-1">
+        <button @click="peopleTagFilter=''" :class="peopleTagFilter==='' ? 'bg-brand-600 text-white shadow-lg' : 'glass text-gray-600 dark:text-gray-300'"
+          class="whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition flex-shrink-0">الكل</button>
+        <template x-for="tag in allPeopleTags" :key="tag">
+          <button @click="peopleTagFilter = peopleTagFilter===tag ? '' : tag"
+            :class="peopleTagFilter===tag ? 'bg-brand-600 text-white shadow-lg' : 'glass text-gray-600 dark:text-gray-300'"
+            class="whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition flex-shrink-0" x-text="tag"></button>
+        </template>
+      </div>
+
+      <div x-show="filteredPeople.length===0 && people.length===0" class="glass rounded-3xl p-10 text-center text-gray-400 animate-fade-in">
+        <p class="text-5xl mb-3">👥</p>
+        <p class="font-black text-base mb-1">لا توجد جهات اتصال</p>
+        <p class="text-xs">ابدأ بإضافة أول شخص مهم في حياتك!</p>
+      </div>
+      <div x-show="filteredPeople.length===0 && people.length>0" class="glass rounded-3xl p-10 text-center text-gray-400 animate-fade-in">
+        <p class="text-5xl mb-3">🔍</p>
+        <p class="font-black text-sm">لا نتائج تطابق بحثك</p>
+      </div>
+
+      <div class="space-y-3">
+        <template x-for="person in filteredPeople" :key="person.id">
+          <div class="glass rounded-3xl p-4 card animate-pop">
+            <div class="flex items-start gap-3">
+              <div class="level-badge w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-lg flex-shrink-0 shadow-lg" x-text="person.name.charAt(0)"></div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0 flex-1">
+                    <h3 class="font-black text-base leading-tight truncate" x-text="person.name"></h3>
+                    <p x-show="person.howWeMet" class="text-xs text-brand-400 dark:text-brand-300 flex items-center gap-1 mt-0.5">
+                      <i class="fa-solid fa-handshake text-xs"></i>
+                      <span class="truncate" x-text="person.howWeMet"></span>
+                    </p>
+                  </div>
+                  <div class="flex gap-1.5 flex-shrink-0">
+                    <button @click="openPersonModal(person)" class="w-8 h-8 glass rounded-xl flex items-center justify-center text-brand-500 hover:text-brand-700 transition hover:scale-110">
+                      <i class="fa-solid fa-pen-to-square text-xs"></i>
+                    </button>
+                    <button @click="confirmDeletePerson(person.id)" class="w-8 h-8 glass rounded-xl flex items-center justify-center text-red-400 hover:text-red-600 transition hover:scale-110">
+                      <i class="fa-solid fa-trash text-xs"></i>
+                    </button>
+                  </div>
+                </div>
+                <p x-show="person.description" class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 clamp-2" x-text="person.description"></p>
+                <div x-show="person.tags && person.tags.length>0" class="flex flex-wrap gap-1 mt-2">
+                  <template x-for="tag in person.tags" :key="tag">
+                    <span class="text-xs bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 px-2.5 py-0.5 rounded-full font-semibold" x-text="tag"></span>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ══  TASKS TAB  ══ -->
+    <div class="tab-pane pb-28 pt-4" :class="activeTab==='tasks' ? 'active' : ''">
+
+      <div class="px-4 space-y-3 mb-4">
+        <div class="flex gap-2">
+          <div class="flex-1 relative">
+            <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none"></i>
+            <input x-model="taskSearch" type="search" placeholder="بحث في المهام..." autocomplete="off"
+              class="w-full glass rounded-2xl py-3 pr-10 pl-4 text-sm outline-none placeholder:text-gray-400" />
+          </div>
+          <button @click="openTaskModal(null)" class="bg-brand-600 hover:bg-brand-700 text-white w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition hover:scale-105 active:scale-95 flex-shrink-0">
+            <i class="fa-solid fa-plus text-lg"></i>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <div class="glass rounded-2xl p-1 flex gap-1 flex-shrink-0">
+            <button @click="taskView='list'; saveSettings()"
+              :class="taskView==='list' ? 'bg-brand-600 text-white shadow' : 'text-gray-500 dark:text-gray-400'"
+              class="px-3 py-2 rounded-xl text-xs font-bold transition">
+              <i class="fa-solid fa-list-ul me-1"></i>قائمة
+            </button>
+            <button @click="taskView='kanban'; saveSettings()"
+              :class="taskView==='kanban' ? 'bg-brand-600 text-white shadow' : 'text-gray-500 dark:text-gray-400'"
+              class="px-3 py-2 rounded-xl text-xs font-bold transition">
+              <i class="fa-solid fa-table-columns me-1"></i>كانبان
+            </button>
+          </div>
+          <select x-model="taskSectionFilter" class="flex-1 glass rounded-2xl py-2.5 px-3 text-xs font-bold outline-none bg-transparent">
+            <option value="">كل الأقسام</option>
+            <template x-for="sec in taskSections" :key="sec"><option :value="sec" x-text="sec"></option></template>
+          </select>
+        </div>
+
+        <div class="flex gap-2 no-scroll overflow-x-auto pb-1">
+          <button @click="taskPriorityFilter=''" :class="taskPriorityFilter==='' ? 'bg-brand-600 text-white shadow-lg' : 'glass text-gray-600 dark:text-gray-300'"
+            class="whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition flex-shrink-0">الكل</button>
+          <template x-for="p in priorityLevels" :key="p.key">
+            <button @click="taskPriorityFilter = taskPriorityFilter===p.key ? '' : p.key"
+              :class="taskPriorityFilter===p.key ? 'bg-brand-600 text-white shadow-lg' : 'glass text-gray-600 dark:text-gray-300'"
+              class="whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition flex-shrink-0" x-text="p.labelAr"></button>
+          </template>
+        </div>
+      </div>
+
+      <!-- LIST VIEW -->
+      <div x-show="taskView==='list'" class="px-4 space-y-5">
+        <template x-for="group in statusGroups" :key="group.key">
+          <div x-show="groupedTasks[group.key] && groupedTasks[group.key].length>0" class="animate-fade-in">
+            <div class="flex items-center gap-2 mb-2.5">
+              <span class="text-lg" x-text="group.icon"></span>
+              <h3 class="font-black text-sm" x-text="group.label"></h3>
+              <span class="bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 text-xs font-black px-2 py-0.5 rounded-full" x-text="groupedTasks[group.key].length"></span>
+            </div>
+            <div class="space-y-2">
+              <template x-for="task in groupedTasks[group.key]" :key="task.id">
+                <div class="glass rounded-3xl p-3.5 card animate-pop" :class="'p-'+task.priority.toLowerCase()">
+                  <div class="flex items-start gap-3">
+                    <button @click="toggleTask(task.id)"
+                      class="mt-0.5 w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+                      :class="task.completed ? 'bg-brand-600 border-brand-600 shadow-lg' : 'border-gray-400 dark:border-gray-600 hover:border-brand-500'">
+                      <i x-show="task.completed" class="fa-solid fa-check text-white text-xs"></i>
+                    </button>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0 flex-1">
+                          <h4 class="text-sm font-bold leading-snug" :class="task.completed ? 'line-through text-gray-400' : ''" x-text="task.title"></h4>
+                          <div class="flex items-center gap-1.5 mt-0.5">
+                            <span class="text-xs font-semibold" :class="task.type==='Important' ? 'text-amber-500' : 'text-gray-400'" x-text="task.type==='Important' ? '⭐ مهمة' : '· عادية'"></span>
+                            <span x-show="task.recurring && task.recurring!=='None'" class="text-xs text-purple-400 font-semibold" x-text="recurringLabel(task.recurring)"></span>
+                          </div>
+                        </div>
+                        <div class="flex gap-1 flex-shrink-0">
+                          <button @click="openTaskModal(task)" class="w-8 h-8 glass rounded-xl flex items-center justify-center text-brand-500 hover:text-brand-700 transition hover:scale-110">
+                            <i class="fa-solid fa-pen-to-square text-xs"></i>
+                          </button>
+                          <button @click="confirmDeleteTask(task.id)" class="w-8 h-8 glass rounded-xl flex items-center justify-center text-red-400 hover:text-red-600 transition hover:scale-110">
+                            <i class="fa-solid fa-trash text-xs"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <p x-show="task.description" class="text-xs text-gray-500 dark:text-gray-400 mt-1 clamp-2" x-text="task.description"></p>
+                      <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                        <span class="text-xs px-2.5 py-0.5 rounded-full font-bold" :class="priorityBadgeClass(task.priority)" x-text="priorityLabel(task.priority)"></span>
+                        <span x-show="task.section" class="text-xs bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 px-2.5 py-0.5 rounded-full font-semibold" x-text="task.section"></span>
+                        <span x-show="task.dueDate" class="text-xs bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                          <i class="fa-regular fa-calendar text-xs"></i> <span x-text="formatDue(task.dueDate)"></span>
+                        </span>
+                        <span x-show="task.points>0" class="text-xs bg-brand-100 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 px-2.5 py-0.5 rounded-full font-bold">
+                          <i class="fa-solid fa-bolt me-0.5"></i><span x-text="task.points+' XP'"></span>
+                        </span>
+                      </div>
+                      <div x-show="task.statTags && task.statTags.length>0" class="flex flex-wrap gap-1 mt-1.5">
+                        <template x-for="stag in (task.statTags||[])" :key="stag">
+                          <span class="text-xs bg-indigo-100 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-lg font-semibold" x-text="statIcon(stag)+' '+stag"></span>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+        <div x-show="filteredTasks.length===0" class="glass rounded-3xl p-10 text-center text-gray-400 animate-fade-in">
+          <p class="text-5xl mb-3">📋</p>
+          <p class="font-black text-base mb-1">لا توجد مهام</p>
+          <p class="text-xs">أضف مهمتك الأولى الآن!</p>
+        </div>
+      </div>
+
+      <!-- KANBAN VIEW -->
+      <div x-show="taskView==='kanban'" class="flex gap-3 no-scroll overflow-x-auto px-4 pb-2 pt-1" style="min-height:420px;">
+        <template x-for="col in statusGroups" :key="col.key">
+          <div class="flex-shrink-0 w-72">
+            <div class="glass rounded-3xl p-3 kanban-col">
+              <div class="flex items-center gap-2 mb-3">
+                <span x-text="col.icon" class="text-lg"></span>
+                <h3 class="font-black text-sm flex-1" x-text="col.label"></h3>
+                <span class="bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 text-xs font-black px-2 py-0.5 rounded-full" x-text="kanbanByStatus(col.key).length"></span>
+              </div>
+              <div class="space-y-2">
+                <template x-for="task in kanbanByStatus(col.key)" :key="task.id">
+                  <div class="bg-white dark:bg-gray-800/90 rounded-2xl p-3 shadow-sm border border-gray-100 dark:border-gray-700/50 card" :class="'p-'+task.priority.toLowerCase()">
+                    <div class="flex items-start gap-2 mb-2">
+                      <button @click="toggleTask(task.id)"
+                        class="mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition hover:scale-110"
+                        :class="task.completed ? 'bg-brand-600 border-brand-600' : 'border-gray-400 hover:border-brand-500'">
+                        <i x-show="task.completed" class="fa-solid fa-check text-white" style="font-size:9px"></i>
+                      </button>
+                      <h4 class="text-xs font-bold flex-1 leading-snug" :class="task.completed ? 'line-through text-gray-400' : ''" x-text="task.title"></h4>
+                      <div class="flex gap-1">
+                        <button @click="openTaskModal(task)" class="text-brand-400 hover:text-brand-600 transition"><i class="fa-solid fa-pen text-xs"></i></button>
+                        <button @click="confirmDeleteTask(task.id)" class="text-red-400 hover:text-red-600 transition"><i class="fa-solid fa-trash text-xs"></i></button>
+                      </div>
+                    </div>
+                    <div class="flex flex-wrap gap-1 mb-2">
+                      <span class="text-xs px-2 py-0.5 rounded-full font-bold" :class="priorityBadgeClass(task.priority)" x-text="priorityLabel(task.priority)"></span>
+                      <span x-show="task.points>0" class="text-xs bg-brand-100 dark:bg-brand-900/20 text-brand-600 px-2 py-0.5 rounded-full font-bold" x-text="task.points+'xp'"></span>
+                      <span x-show="task.type==='Important'" class="text-xs bg-amber-100 dark:bg-amber-900/20 text-amber-600 px-2 py-0.5 rounded-full font-bold">⭐</span>
+                    </div>
+                    <div class="flex gap-1 border-t border-gray-100 dark:border-gray-700 pt-2">
+                      <template x-for="s in statusGroups.filter(g=>g.key!==col.key)" :key="s.key">
+                        <button @click="moveTaskStatus(task.id, s.key)" class="flex-1 text-xs glass py-1 rounded-lg font-bold text-gray-500 hover:text-brand-500 transition text-center" x-text="s.icon+' '+s.label"></button>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+                <div x-show="kanbanByStatus(col.key).length===0" class="text-center py-10 text-gray-400">
+                  <p class="text-2xl mb-1" x-text="col.icon"></p>
+                  <p class="text-xs">فارغ</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </main>
+
+  <!-- BOTTOM NAV -->
+  <nav class="glass border-t border-gray-200 dark:border-gray-800 flex-shrink-0" style="padding-bottom:max(env(safe-area-inset-bottom),8px);">
+    <div class="flex">
+      <template x-for="tab in tabs" :key="tab.key">
+        <button @click="switchTab(tab.key)" class="flex-1 flex flex-col items-center py-2 gap-0.5 transition-colors"
+          :class="activeTab===tab.key ? 'text-brand-600 dark:text-brand-400' : 'text-gray-400 dark:text-gray-500 hover:text-brand-500'">
+          <span class="text-2xl transition-transform duration-200" :class="activeTab===tab.key ? 'nav-active' : ''" x-text="tab.icon"></span>
+          <span class="text-xs font-bold" x-text="tab.label"></span>
+          <div class="w-1.5 h-1.5 rounded-full bg-brand-600 transition-all duration-200" :class="activeTab===tab.key ? 'opacity-100 scale-100' : 'opacity-0 scale-0'"></div>
+        </button>
+      </template>
+    </div>
+  </nav>
+</div>
+
+
+<!-- ████████  PERSON MODAL  ████████ -->
+<div x-show="personModalOpen" x-transition:enter="animate-fade-in"
+     class="modal-bg fixed inset-0 z-[60] bg-black/60 flex items-end justify-center" @click.self="personModalOpen=false">
+  <div class="glass w-full max-w-lg rounded-t-3xl p-6 animate-slide-up max-h-[90dvh] overflow-y-auto no-scroll" @click.stop>
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-xl font-black" x-text="editingPerson ? '✏️ تعديل الجهة' : '👤 شخص جديد'"></h2>
+      <button @click="personModalOpen=false" class="w-9 h-9 glass rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-600 transition"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">الاسم <span class="text-red-500">*</span></label>
+        <input x-model="personForm.name" type="text" placeholder="اكتب الاسم..." autocomplete="off"
+          class="w-full glass rounded-2xl px-4 py-3 text-sm outline-none placeholder:text-gray-400" />
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">وصف / ملاحظات</label>
+        <textarea x-model="personForm.description" rows="2" placeholder="أي ملاحظات مهمة..."
+          class="w-full glass rounded-2xl px-4 py-3 text-sm outline-none placeholder:text-gray-400 resize-none"></textarea>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">كيف تعرفت عليه / عليها؟</label>
+        <input x-model="personForm.howWeMet" type="text" placeholder="مثال: في الجامعة، مؤتمر تقني..." autocomplete="off"
+          class="w-full glass rounded-2xl px-4 py-3 text-sm outline-none placeholder:text-gray-400" />
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">الوسوم / نوع العلاقة</label>
+        <div class="flex flex-wrap gap-2 mb-2">
+          <template x-for="tag in predefinedPersonTags" :key="tag">
+            <button @click="togglePersonTag(tag)" :class="personForm.tags.includes(tag) ? 'bg-brand-600 text-white shadow-lg' : 'glass text-gray-600 dark:text-gray-300'"
+              class="px-3.5 py-1.5 rounded-full text-xs font-bold transition" x-text="tag"></button>
+          </template>
+        </div>
+        <div class="flex gap-2">
+          <input x-model="customPersonTag" @keydown.enter.prevent="addCustomPersonTag()" type="text" placeholder="أضف وسمًا مخصصًا..."
+            class="flex-1 glass rounded-xl px-3.5 py-2.5 text-xs outline-none placeholder:text-gray-400" />
+          <button @click="addCustomPersonTag()" class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition">إضافة</button>
+        </div>
+        <div x-show="personForm.tags.length>0" class="flex flex-wrap gap-1.5 mt-2.5">
+          <template x-for="tag in personForm.tags" :key="tag">
+            <span class="text-xs bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 px-2.5 py-1 rounded-full font-semibold flex items-center gap-1.5">
+              <span x-text="tag"></span>
+              <button @click="personForm.tags = personForm.tags.filter(t=>t!==tag)" class="w-4 h-4 bg-red-400 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition">
+                <i class="fa-solid fa-xmark" style="font-size:9px"></i>
+              </button>
+            </span>
+          </template>
+        </div>
+      </div>
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button @click="savePerson()" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white py-3.5 rounded-2xl font-black text-sm transition shadow-lg">
+        <i class="fa-solid fa-check me-2"></i><span x-text="editingPerson ? 'تحديث الجهة' : 'إضافة الشخص'"></span>
+      </button>
+      <button @click="personModalOpen=false" class="glass px-6 py-3.5 rounded-2xl text-sm font-semibold transition">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- ████████  TASK MODAL  ████████ -->
+<div x-show="taskModalOpen" x-transition:enter="animate-fade-in"
+     class="modal-bg fixed inset-0 z-[60] bg-black/60 flex items-end justify-center" @click.self="taskModalOpen=false">
+  <div class="glass w-full max-w-lg rounded-t-3xl p-5 animate-slide-up max-h-[94dvh] overflow-y-auto no-scroll" @click.stop>
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-xl font-black" x-text="editingTask ? '✏️ تعديل المهمة' : '📋 مهمة جديدة'"></h2>
+      <button @click="taskModalOpen=false" class="w-9 h-9 glass rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-600 transition"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="space-y-3.5">
+      <div>
+        <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">العنوان <span class="text-red-500">*</span></label>
+        <input x-model="taskForm.title" type="text" placeholder="اكتب عنوان المهمة..." autocomplete="off"
+          class="w-full glass rounded-2xl px-4 py-3 text-sm outline-none placeholder:text-gray-400" />
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">الوصف</label>
+        <textarea x-model="taskForm.description" rows="2" placeholder="تفاصيل إضافية..."
+          class="w-full glass rounded-2xl px-4 py-3 text-sm outline-none placeholder:text-gray-400 resize-none"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">تاريخ الاستحقاق</label>
+          <input x-model="taskForm.dueDate" type="datetime-local" class="w-full glass rounded-2xl px-3 py-2.5 text-xs font-semibold outline-none bg-transparent" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">الأولوية</label>
+          <select x-model="taskForm.priority" class="w-full glass rounded-2xl px-3 py-2.5 text-xs font-bold outline-none bg-transparent">
+            <option value="Low">🟢 منخفضة</option>
+            <option value="Medium">🟡 متوسطة</option>
+            <option value="High">🟠 عالية</option>
+            <option value="Urgent">🔴 عاجلة</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">الحالة</label>
+          <select x-model="taskForm.status" class="w-full glass rounded-2xl px-3 py-2.5 text-xs font-bold outline-none bg-transparent">
+            <option value="To-Do">📌 للتنفيذ</option>
+            <option value="In Progress">🔄 قيد التنفيذ</option>
+            <option value="Done">✅ منجزة</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">القسم</label>
+          <select x-model="taskForm.section" class="w-full glass rounded-2xl px-3 py-2.5 text-xs font-bold outline-none bg-transparent">
+            <option value="">بدون قسم</option>
+            <template x-for="sec in taskSections" :key="sec"><option :value="sec" x-text="sec"></option></template>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">النوع</label>
+          <select x-model="taskForm.type" class="w-full glass rounded-2xl px-3 py-2.5 text-xs font-bold outline-none bg-transparent">
+            <option value="Casual">عادية</option>
+            <option value="Important">⭐ مهمة</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">التكرار</label>
+          <select x-model="taskForm.recurring" class="w-full glass rounded-2xl px-3 py-2.5 text-xs font-bold outline-none bg-transparent">
+            <option value="None">بدون</option>
+            <option value="Daily">🔁 يومي</option>
+            <option value="Weekly">📅 أسبوعي</option>
+            <option value="Custom">⚙️ مخصص</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">الإحصائيات المرتبطة</label>
+        <div class="flex flex-wrap gap-2">
+          <template x-for="s in statTagOptions" :key="s.key">
+            <button @click="toggleStatTag(s.key)" :class="taskForm.statTags.includes(s.key) ? 'bg-brand-600 text-white shadow-lg' : 'glass text-gray-600 dark:text-gray-300'"
+              class="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 hover:scale-105 active:scale-95">
+              <span x-text="s.icon"></span><span x-text="s.nameAr"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <label class="text-xs font-bold text-gray-500 dark:text-gray-400">نقاط XP عند الإنجاز</label>
+          <div class="glass rounded-xl px-3 py-1 flex items-center gap-1">
+            <i class="fa-solid fa-bolt text-brand-500 text-xs"></i>
+            <span class="text-sm font-black text-brand-500" x-text="taskForm.points"></span>
+            <span class="text-xs text-gray-400">XP</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-gray-400">0</span>
+          <input x-model.number="taskForm.points" type="range" min="0" max="500" step="5" class="flex-1 accent-indigo-500" />
+          <span class="text-xs text-gray-400">500</span>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <template x-for="preset in [10,25,50,100,200]" :key="preset">
+            <button @click="taskForm.points=preset" :class="taskForm.points===preset ? 'bg-brand-600 text-white' : 'glass text-gray-500'"
+              class="flex-1 py-1 rounded-lg text-xs font-bold transition" x-text="preset"></button>
+          </template>
+        </div>
+      </div>
+    </div>
+    <div class="flex gap-3 mt-5">
+      <button @click="saveTask()" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white py-3.5 rounded-2xl font-black text-sm transition shadow-lg">
+        <i class="fa-solid fa-check me-2"></i><span x-text="editingTask ? 'تحديث المهمة' : 'إضافة المهمة'"></span>
+      </button>
+      <button @click="taskModalOpen=false" class="glass px-6 py-3.5 rounded-2xl text-sm font-semibold transition">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- ████████  PATIENCE MODAL  ████████ -->
+<div x-show="patienceModalOpen" x-transition:enter="animate-fade-in"
+     class="modal-bg fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4" @click.self="patienceModalOpen=false">
+  <div class="glass w-full max-w-sm rounded-3xl p-6 animate-pop" @click.stop>
+    <div class="text-center mb-6">
+      <div class="text-5xl mb-3">🧘</div>
+      <h2 class="text-xl font-black">إضافة نقاط الصبر</h2>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">كافئ نفسك على لحظة صبر حقيقية</p>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <label class="text-xs font-bold text-gray-500 dark:text-gray-400">النقاط</label>
+          <div class="glass rounded-xl px-3 py-1 flex items-center gap-1">
+            <span class="text-xl font-black text-emerald-400" x-text="patiencePoints"></span>
+            <span class="text-xs text-gray-400">XP</span>
+          </div>
+        </div>
+        <input x-model.number="patiencePoints" type="range" min="1" max="200" step="1" class="w-full accent-emerald-500" />
+        <div class="flex gap-2 mt-2">
+          <template x-for="p in [5,10,25,50,100]" :key="p">
+            <button @click="patiencePoints=p" :class="patiencePoints===p ? 'bg-emerald-500 text-white' : 'glass text-gray-500'"
+              class="flex-1 py-1.5 rounded-lg text-xs font-bold transition" x-text="p"></button>
+          </template>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">ما الذي صبرت عليه؟ (اختياري)</label>
+        <input x-model="patienceNote" @keydown.enter.prevent="addPatienceXP()" type="text" placeholder="مثال: صبرت على موقف صعب..." autocomplete="off"
+          class="w-full glass rounded-2xl px-4 py-3 text-sm outline-none placeholder:text-gray-400" />
+      </div>
+    </div>
+    <div class="flex gap-3 mt-5">
+      <button @click="addPatienceXP()" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3.5 rounded-2xl font-black text-sm transition shadow-lg">
+        <i class="fa-solid fa-plus me-2"></i>إضافة XP
+      </button>
+      <button @click="patienceModalOpen=false" class="glass px-5 py-3.5 rounded-2xl text-sm font-semibold">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- ████████  SETTINGS DRAWER  ████████ -->
+<div x-show="settingsOpen" x-transition:enter="animate-fade-in"
+     class="modal-bg fixed inset-0 z-[60] bg-black/60 flex items-end justify-center" @click.self="settingsOpen=false">
+  <div class="glass w-full max-w-lg rounded-t-3xl p-6 animate-slide-up max-h-[88dvh] overflow-y-auto no-scroll" @click.stop>
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-xl font-black">⚙️ الإعدادات</h2>
+      <button @click="settingsOpen=false" class="w-9 h-9 glass rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-600 transition"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="space-y-3">
+
+      <div class="glass rounded-2xl p-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center text-xl">🌙</div>
+          <div><p class="font-bold text-sm">الوضع الداكن</p><p class="text-xs text-gray-500 dark:text-gray-400">تغيير مظهر التطبيق</p></div>
+        </div>
+        <button @click="toggleDark()" class="relative w-12 h-6 rounded-full transition-colors duration-300 flex-shrink-0" :class="darkMode ? 'bg-brand-600' : 'bg-gray-300 dark:bg-gray-700'">
+          <div class="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all duration-300" :class="darkMode ? 'right-0.5 left-auto' : 'left-0.5 right-auto'"></div>
+        </button>
+      </div>
+
+      <div class="glass rounded-2xl p-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center text-xl">✅</div>
+          <div><p class="font-bold text-sm">إظهار المهام المنجزة</p><p class="text-xs text-gray-500 dark:text-gray-400">عرضها في قائمة المهام</p></div>
+        </div>
+        <button @click="showCompletedTasks=!showCompletedTasks; saveSettings()" class="relative w-12 h-6 rounded-full transition-colors duration-300 flex-shrink-0" :class="showCompletedTasks ? 'bg-brand-600' : 'bg-gray-300 dark:bg-gray-700'">
+          <div class="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all duration-300" :class="showCompletedTasks ? 'right-0.5 left-auto' : 'left-0.5 right-auto'"></div>
+        </button>
+      </div>
+
+      <div class="glass rounded-2xl p-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center text-xl">🔔</div>
+          <div><p class="font-bold text-sm">الإشعارات</p><p class="text-xs text-gray-500 dark:text-gray-400" x-text="notifPermission"></p></div>
+        </div>
+        <button x-show="notifPermission !== 'مفعّل ✓'" @click="requestNotifications()" class="bg-amber-500 hover:bg-amber-600 text-white text-xs px-4 py-2 rounded-xl font-bold transition">تفعيل</button>
+        <i x-show="notifPermission === 'مفعّل ✓'" class="fa-solid fa-circle-check text-emerald-400 text-xl"></i>
+      </div>
+
+      <div class="glass rounded-2xl p-4">
+        <h3 class="font-black text-sm mb-3">📊 ملخص الإحصائيات</h3>
+        <div class="space-y-2">
+          <template x-for="stat in computedStats" :key="stat.key">
+            <div class="flex items-center justify-between">
+              <span class="text-sm flex items-center gap-1.5" x-text="stat.icon+' '+stat.nameAr"></span>
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-gray-400" x-text="stat.xp.toLocaleString()+' XP'"></span>
+                <span class="level-badge text-white font-bold px-2 py-0.5 rounded-lg" x-text="'Lv '+stat.level"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <div x-show="Object.keys(historicalXP).some(k=>historicalXP[k]>0)" class="glass rounded-2xl p-4">
+        <h3 class="font-black text-sm mb-3">📜 XP محفوظ من مهام محذوفة</h3>
+        <div class="space-y-1.5">
+          <template x-for="key in Object.keys(historicalXP).filter(k=>historicalXP[k]>0)" :key="key">
+            <div class="flex items-center justify-between text-sm">
+              <span x-text="statIcon(key)+' '+key"></span>
+              <span class="font-bold text-brand-400" x-text="historicalXP[key].toLocaleString()+' XP'"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <div class="glass rounded-2xl p-4">
+        <h3 class="font-black text-sm mb-3">🗄️ إدارة البيانات</h3>
+        <div class="space-y-2">
+          <button @click="exportData()" class="w-full glass py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition">
+            <i class="fa-solid fa-file-export text-brand-500"></i> تصدير النسخ الاحتياطي (JSON)
+          </button>
+          <label class="w-full glass py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition cursor-pointer">
+            <i class="fa-solid fa-file-import text-emerald-500"></i> استيراد بيانات من ملف JSON
+            <input type="file" accept=".json" class="hidden" @change="importData($event)" />
+          </label>
+          <button @click="clearAllData()" class="w-full glass py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition">
+            <i class="fa-solid fa-trash-can"></i> مسح جميع البيانات
+          </button>
+        </div>
+      </div>
+
+      <p class="text-center text-xs text-gray-400 py-1">ذاكرة Pocket v1.0 · بيانات محلية 🔒 · صُنع بـ ❤️</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ████████  ALPINE LOGIC  ████████ -->
+<script>
+function App() {
+  return {
+    /* Navigation */
+    activeTab: 'home',
+    tabs: [
+      { key:'home',   icon:'🏠', label:'الرئيسية' },
+      { key:'people', icon:'👥', label:'الأشخاص'  },
+      { key:'tasks',  icon:'📋', label:'المهام'   },
+    ],
+
+    /* UI */
+    darkMode: false,
+    showCompletedTasks: false,
+    showInstallBanner: false,
+    deferredInstallPrompt: null,
+    greeting: '...',
+    toasts: [],
+    settingsOpen: false,
+    notifPermission: 'غير مفعّل',
+
+    /* Data */
+    tasks: [],
+    people: [],
+    historicalXP: {},
+    patienceManualXP: 0,
+    recentActivity: [],
+
+    /* People UI */
+    peopleSearch: '',
+    peopleTagFilter: '',
+    personModalOpen: false,
+    editingPerson: null,
+    personForm: { name:'', description:'', howWeMet:'', tags:[] },
+    customPersonTag: '',
+    predefinedPersonTags: ['صديق','صديقة','زميل','عائلة','أستاذ','مرشد','زبون','مسؤول','جار','طالب'],
+
+    /* Tasks UI */
+    taskSearch: '',
+    taskView: 'list',
+    taskSectionFilter: '',
+    taskPriorityFilter: '',
+    taskModalOpen: false,
+    editingTask: null,
+    taskForm: { title:'', description:'', dueDate:'', priority:'Medium', status:'To-Do', recurring:'None', section:'', type:'Casual', statTags:[], points:50 },
+    taskSections: ['المنزل','المدرسة','العمل','شخصي','صحة','مالي','ترفيه','روحاني'],
+    priorityLevels: [
+      {key:'Urgent',labelAr:'عاجلة'},{key:'High',labelAr:'عالية'},
+      {key:'Medium',labelAr:'متوسطة'},{key:'Low',labelAr:'منخفضة'},
+    ],
+    statusGroups: [
+      {key:'To-Do',label:'للتنفيذ',icon:'📌'},
+      {key:'In Progress',label:'قيد التنفيذ',icon:'🔄'},
+      {key:'Done',label:'منجزة',icon:'✅'},
+    ],
+    statTagOptions: [
+      {key:'Strength',    nameAr:'القوة',   icon:'💪'},
+      {key:'Intelligence',nameAr:'الذكاء',  icon:'🧠'},
+      {key:'Religion',    nameAr:'الدين',   icon:'🌙'},
+      {key:'Creativity',  nameAr:'الإبداع', icon:'🎨'},
+    ],
+
+    /* Patience */
+    patienceModalOpen: false,
+    patiencePoints: 25,
+    patienceNote: '',
+
+    /* ═══ INIT ═══ */
+    init() {
+      this.loadAll();
+      this.applyTheme();
+      this.setGreeting();
+      this.checkNotif();
+      this.registerSW();
+      this.listenInstall();
+      this.scheduleReminders();
+    },
+
+    setGreeting() {
+      const h = new Date().getHours();
+      this.greeting = h<5?'ليلة طيبة 🌙':h<12?'صباح الخير ☀️':h<17?'مساء النور 🌤️':'مساء الخير 🌙';
+    },
+
+    /* ═══ PWA ═══ */
+    registerSW() {
+      if (!('serviceWorker' in navigator)) return;
+      const code = `const C='dh-v2';
+self.addEventListener('install',()=>self.skipWaiting());
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))));self.clients.claim();});
+self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));});
+self.addEventListener('notificationclick',e=>{e.notification.close();e.waitUntil(clients.matchAll({type:'window'}).then(ws=>{if(ws.length)ws[0].focus();else clients.openWindow('/');}));});`;
+      navigator.serviceWorker.register(URL.createObjectURL(new Blob([code],{type:'application/javascript'})),{scope:'/'}).catch(()=>{});
+    },
+
+    listenInstall() {
+      window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); this.deferredInstallPrompt=e; this.showInstallBanner=true; });
+      window.addEventListener('appinstalled', () => { this.showInstallBanner=false; this.showToast('🎉 تم تثبيت التطبيق!','success'); });
+    },
+
+    installApp() {
+      if (!this.deferredInstallPrompt) return;
+      this.deferredInstallPrompt.prompt();
+      this.deferredInstallPrompt.userChoice.then(()=>{ this.deferredInstallPrompt=null; this.showInstallBanner=false; });
+    },
+
+    /* ═══ THEME ═══ */
+    toggleDark() { this.darkMode=!this.darkMode; this.applyTheme(); this.saveSettings(); },
+    applyTheme() { document.documentElement.classList.toggle('dark', this.darkMode); },
+
+    /* ═══ STORAGE ═══ */
+    loadAll() {
+      try {
+        this.tasks           = JSON.parse(localStorage.getItem('dh_tasks')||'[]');
+        this.people          = JSON.parse(localStorage.getItem('dh_people')||'[]');
+        this.historicalXP    = JSON.parse(localStorage.getItem('dh_histxp')||'{}');
+        this.patienceManualXP= parseFloat(localStorage.getItem('dh_patience')||'0');
+        this.recentActivity  = JSON.parse(localStorage.getItem('dh_activity')||'[]');
+        const s = JSON.parse(localStorage.getItem('dh_settings')||'{}');
+        this.darkMode           = s.darkMode           ?? false;
+        this.showCompletedTasks = s.showCompletedTasks ?? false;
+        this.activeTab          = s.activeTab          ?? 'home';
+        this.taskView           = s.taskView           ?? 'list';
+      } catch(e) { console.error(e); }
+    },
+
+    persist() {
+      localStorage.setItem('dh_tasks',    JSON.stringify(this.tasks));
+      localStorage.setItem('dh_people',   JSON.stringify(this.people));
+      localStorage.setItem('dh_histxp',   JSON.stringify(this.historicalXP));
+      localStorage.setItem('dh_patience', String(this.patienceManualXP));
+      localStorage.setItem('dh_activity', JSON.stringify(this.recentActivity.slice(0,60)));
+    },
+
+    saveSettings() {
+      localStorage.setItem('dh_settings', JSON.stringify({
+        darkMode:this.darkMode, showCompletedTasks:this.showCompletedTasks,
+        activeTab:this.activeTab, taskView:this.taskView,
+      }));
+    },
+
+    switchTab(key) { this.activeTab=key; this.saveSettings(); },
+
+    exportData() {
+      const d = { version:'1.0', exportedAt:new Date().toISOString(), tasks:this.tasks, people:this.people, historicalXP:this.historicalXP, patienceManualXP:this.patienceManualXP, recentActivity:this.recentActivity };
+      const a = Object.assign(document.createElement('a'),{ href:URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'})), download:`dhakira_${new Date().toISOString().slice(0,10)}.json` });
+      a.click();
+      this.showToast('تم تصدير البيانات ✅','success');
+    },
+
+    importData(ev) {
+      const f = ev.target.files[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = e => {
+        try {
+          const d = JSON.parse(e.target.result);
+          if (Array.isArray(d.tasks))          this.tasks           = d.tasks;
+          if (Array.isArray(d.people))         this.people          = d.people;
+          if (d.historicalXP)                  this.historicalXP    = d.historicalXP;
+          if (d.patienceManualXP != null)      this.patienceManualXP= Number(d.patienceManualXP);
+          if (Array.isArray(d.recentActivity)) this.recentActivity  = d.recentActivity;
+          this.persist(); this.settingsOpen=false;
+          this.showToast('تم استيراد البيانات ✅','success');
+        } catch { this.showToast('ملف غير صالح!','error'); }
+      };
+      r.readAsText(f); ev.target.value='';
+    },
+
+    clearAllData() {
+      if (!confirm('سيتم حذف جميع البيانات نهائيًا. هل أنت متأكد؟')) return;
+      localStorage.clear();
+      this.tasks=[]; this.people=[]; this.historicalXP={}; this.patienceManualXP=0; this.recentActivity=[];
+      this.settingsOpen=false; this.showToast('تم مسح جميع البيانات','info');
+    },
+
+    /* ═══ RPG LEVEL ENGINE ═══ */
+    // XP needed to go from level N to N+1
+    xpGap(n) {
+      if (n < 1) return 0;
+      // Level 1→2 needs 100 XP; Level N→N+1 needs 100×1.2^(N-1)
+      return Math.round(100 * Math.pow(1.2, n - 1));
+    },
+
+    resolveLevel(xp) {
+      let lvl=1, acc=0;
+      for (let n=1; n<=300; n++) {
+        const gap = this.xpGap(n);
+        if (xp >= acc + gap) { acc += gap; lvl = n+1; }
+        else {
+          const inside = xp - acc;
+          return { level:lvl, progressPct: gap>0 ? Math.min(100,Math.round(inside/gap*100)) : 100, xpNeeded: Math.max(0, gap-inside), nextThreshold: acc+gap };
+        }
+      }
+      return { level:300, progressPct:100, xpNeeded:0, nextThreshold:xp };
+    },
+
+    get statMeta() {
+      return [
+        {key:'Strength',    nameAr:'القوة',    nameEn:'Strength',    icon:'💪', bgClass:'bg-red-100 dark:bg-red-900/20',     barClass:'bg-gradient-to-l from-red-400 to-rose-600'},
+        {key:'Intelligence',nameAr:'الذكاء',   nameEn:'Intelligence',icon:'🧠', bgClass:'bg-blue-100 dark:bg-blue-900/20',   barClass:'bg-gradient-to-l from-blue-400 to-cyan-500'},
+        {key:'Religion',    nameAr:'الدين',    nameEn:'Religion',    icon:'🌙', bgClass:'bg-indigo-100 dark:bg-indigo-900/20',barClass:'bg-gradient-to-l from-indigo-400 to-purple-600'},
+        {key:'Creativity',  nameAr:'الإبداع',  nameEn:'Creativity',  icon:'🎨', bgClass:'bg-pink-100 dark:bg-pink-900/20',   barClass:'bg-gradient-to-l from-pink-400 to-fuchsia-600'},
+        {key:'Patience',    nameAr:'الصبر',    nameEn:'Patience',    icon:'🧘', bgClass:'bg-emerald-100 dark:bg-emerald-900/20',barClass:'bg-gradient-to-l from-emerald-400 to-teal-600'},
+      ];
+    },
+
+    rawXP(key) {
+      return this.tasks.filter(t=>t.completed&&(t.statTags||[]).includes(key)).reduce((s,t)=>s+(Number(t.points)||0),0);
+    },
+
+    get computedStats() {
+      return this.statMeta.map(m => {
+        const xp = (m.key==='Patience' ? this.patienceManualXP : this.rawXP(m.key)) + (this.historicalXP[m.key]||0);
+        const lvl = this.resolveLevel(xp);
+        return { ...m, xp, ...lvl };
+      });
+    },
+
+    get totalXP()           { return this.computedStats.reduce((s,st)=>s+st.xp,0); },
+    get overallLevel()      { return this.resolveLevel(this.totalXP).level; },
+    get overallProgressPct(){ return this.resolveLevel(this.totalXP).progressPct; },
+    get xpToNextOverall()   { return this.resolveLevel(this.totalXP).xpNeeded; },
+
+    /* ═══ TASKS ═══ */
+    openTaskModal(task) {
+      this.editingTask = task||null;
+      this.taskForm = task ? {...task, statTags:[...(task.statTags||[])]} : {title:'',description:'',dueDate:'',priority:'Medium',status:'To-Do',recurring:'None',section:'',type:'Casual',statTags:[],points:50};
+      this.taskModalOpen = true;
+    },
+
+    saveTask() {
+      if (!this.taskForm.title.trim()) { this.showToast('العنوان مطلوب!','error'); return; }
+      if (this.editingTask) {
+        const i=this.tasks.findIndex(t=>t.id===this.editingTask.id);
+        if (i!==-1) this.tasks[i]={...this.tasks[i],...this.taskForm};
+      } else {
+        this.tasks.push({id:this.uid(),...this.taskForm,completed:false,completedAt:null});
+      }
+      this.persist(); this.taskModalOpen=false;
+      this.showToast(this.editingTask?'تم تحديث المهمة ✅':'تمت إضافة المهمة 🎯','success');
+      this.scheduleReminders();
+    },
+
+    toggleTask(id) {
+      const t=this.tasks.find(x=>x.id===id); if (!t) return;
+      t.completed=!t.completed; t.completedAt=t.completed?new Date().toISOString():null;
+      if (t.completed && t.status!=='Done') t.status='Done';
+      if (!t.completed && t.status==='Done') t.status='To-Do';
+      if (t.completed && (t.points||0)>0) {
+        this.logActivity({icon:'✅',title:t.title,detail:(t.statTags||[]).map(s=>this.statIcon(s)).join(' ')||'📋 عامة',xp:t.points});
+        this.floatXP(t.points);
+        this.showToast(`+${t.points} XP مكتسبة! 🎉`,'success');
+      }
+      this.persist();
+    },
+
+    confirmDeleteTask(id) { if (confirm('هل تريد حذف هذه المهمة؟')) this.deleteTask(id); },
+
+    deleteTask(id) {
+      const t=this.tasks.find(x=>x.id===id); if (!t) return;
+      if (t.completed && (t.points||0)>0) {
+        (t.statTags||[]).forEach(stat=>{ this.historicalXP[stat]=(this.historicalXP[stat]||0)+(t.points||0); });
+      }
+      this.tasks=this.tasks.filter(x=>x.id!==id);
+      this.persist(); this.showToast('تم حذف المهمة','info');
+    },
+
+    moveTaskStatus(id, status) {
+      const t=this.tasks.find(x=>x.id===id); if (!t) return;
+      t.status=status;
+      if (status==='Done' && !t.completed) {
+        t.completed=true; t.completedAt=new Date().toISOString();
+        if ((t.points||0)>0) { this.logActivity({icon:'✅',title:t.title,detail:(t.statTags||[]).map(s=>this.statIcon(s)).join(' ')||'📋',xp:t.points}); this.floatXP(t.points); this.showToast(`+${t.points} XP!`,'success'); }
+      }
+      if (status!=='Done') t.completed=false;
+      this.persist();
+    },
+
+    toggleStatTag(key) {
+      const i=this.taskForm.statTags.indexOf(key);
+      if (i===-1) this.taskForm.statTags.push(key); else this.taskForm.statTags.splice(i,1);
+    },
+
+    get filteredTasks() {
+      const qs=this.taskSearch.toLowerCase();
+      return this.tasks.filter(t=>{
+        if (!this.showCompletedTasks && t.completed) return false;
+        if (qs && !t.title.toLowerCase().includes(qs) && !(t.description||'').toLowerCase().includes(qs)) return false;
+        if (this.taskSectionFilter && t.section!==this.taskSectionFilter) return false;
+        if (this.taskPriorityFilter && t.priority!==this.taskPriorityFilter) return false;
+        return true;
+      });
+    },
+
+    get groupedTasks() {
+      const g={'To-Do':[],'In Progress':[],'Done':[]};
+      this.filteredTasks.forEach(t=>{ if(g[t.status]) g[t.status].push(t); });
+      return g;
+    },
+
+    kanbanByStatus(s) { return this.filteredTasks.filter(t=>t.status===s); },
+
+    /* ═══ PEOPLE ═══ */
+    openPersonModal(person) {
+      this.editingPerson=person||null;
+      this.personForm=person?{...person,tags:[...(person.tags||[])]}:{name:'',description:'',howWeMet:'',tags:[]};
+      this.customPersonTag=''; this.personModalOpen=true;
+    },
+
+    savePerson() {
+      if (!this.personForm.name.trim()) { this.showToast('الاسم مطلوب!','error'); return; }
+      if (this.editingPerson) {
+        const i=this.people.findIndex(p=>p.id===this.editingPerson.id);
+        if (i!==-1) this.people[i]={...this.people[i],...this.personForm};
+      } else { this.people.push({id:this.uid(),...this.personForm}); }
+      this.persist(); this.personModalOpen=false;
+      this.showToast(this.editingPerson?'تم تحديث جهة الاتصال ✅':'تمت الإضافة 👤','success');
+    },
+
+    confirmDeletePerson(id) {
+      if (confirm('هل تريد حذف هذا الشخص؟')) { this.people=this.people.filter(p=>p.id!==id); this.persist(); this.showToast('تم الحذف','info'); }
+    },
+
+    togglePersonTag(tag) { const i=this.personForm.tags.indexOf(tag); if(i===-1)this.personForm.tags.push(tag);else this.personForm.tags.splice(i,1); },
+    addCustomPersonTag() { const t=this.customPersonTag.trim(); if(t&&!this.personForm.tags.includes(t))this.personForm.tags.push(t); this.customPersonTag=''; },
+
+    get filteredPeople() {
+      const qs=this.peopleSearch.toLowerCase();
+      return this.people.filter(p=>{
+        if(qs&&!p.name.toLowerCase().includes(qs))return false;
+        if(this.peopleTagFilter&&!(p.tags||[]).includes(this.peopleTagFilter))return false;
+        return true;
+      });
+    },
+    get allPeopleTags() { const s=new Set(); this.people.forEach(p=>(p.tags||[]).forEach(t=>s.add(t))); return [...s].sort(); },
+
+    /* ═══ PATIENCE ═══ */
+    openPatienceModal() { this.patiencePoints=25; this.patienceNote=''; this.patienceModalOpen=true; },
+
+    addPatienceXP() {
+      const pts=Math.max(1,Math.round(this.patiencePoints));
+      this.patienceManualXP+=pts;
+      this.logActivity({icon:'🧘',title:this.patienceNote.trim()||'لحظة صبر',detail:'🧘 الصبر',xp:pts});
+      this.floatXP(pts); this.persist(); this.patienceModalOpen=false;
+      this.showToast(`+${pts} XP للصبر 🧘`,'success');
+    },
+
+    /* ═══ NOTIFICATIONS ═══ */
+    checkNotif() {
+      if (!('Notification' in window)) { this.notifPermission='غير مدعوم'; return; }
+      this.notifPermission = {granted:'مفعّل ✓',denied:'محظور ✗',default:'غير مفعّل'}[Notification.permission]||'غير مفعّل';
+    },
+
+    requestNotifications() {
+      if (!('Notification' in window)) return;
+      Notification.requestPermission().then(()=>{ this.checkNotif(); if(Notification.permission==='granted')this.showToast('تم تفعيل الإشعارات 🔔','success'); });
+    },
+
+    scheduleReminders() {
+      if (!('Notification' in window)||Notification.permission!=='granted') return;
+      const now=Date.now();
+      this.tasks.filter(t=>!t.completed&&t.dueDate).forEach(task=>{
+        const diff=new Date(task.dueDate).getTime()-now;
+        if (diff>0&&diff<=86400000) setTimeout(()=>{ try{new Notification('ذاكرة Pocket ⏰',{body:'حان وقت: '+task.title,tag:task.id});}catch{} },diff);
+      });
+    },
+
+    /* ═══ TOASTS ═══ */
+    showToast(msg, type='info') {
+      const id=this.uid(); this.toasts.push({id,msg,type});
+      setTimeout(()=>this.dismissToast(id),3500);
+    },
+    dismissToast(id) { this.toasts=this.toasts.filter(t=>t.id!==id); },
+
+    /* ═══ ACTIVITY ═══ */
+    logActivity(act) {
+      this.recentActivity.unshift({id:this.uid(),...act,at:new Date().toISOString()});
+      if(this.recentActivity.length>80)this.recentActivity.length=80;
+    },
+
+    /* ═══ HELPERS ═══ */
+    uid() { return Date.now().toString(36)+Math.random().toString(36).slice(2,8); },
+
+    floatXP(xp) {
+      const el=document.createElement('div'); el.className='xp-float'; el.textContent=`+${xp} XP`;
+      document.body.appendChild(el); setTimeout(()=>el.remove(),1200);
+    },
+
+    statIcon(k) { return {Strength:'💪',Intelligence:'🧠',Religion:'🌙',Creativity:'🎨',Patience:'🧘'}[k]||'⚡'; },
+    priorityLabel(p) { return {Low:'منخفضة',Medium:'متوسطة',High:'عالية',Urgent:'عاجلة'}[p]||p; },
+    priorityBadgeClass(p) {
+      return {Urgent:'bg-red-100 dark:bg-red-900/20 text-red-600',High:'bg-orange-100 dark:bg-orange-900/20 text-orange-600',
+              Medium:'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700',Low:'bg-green-100 dark:bg-green-900/20 text-green-700'}[p]||'bg-gray-100 text-gray-600';
+    },
+    recurringLabel(r) { return {None:'',Daily:'🔁 يومي',Weekly:'📅 أسبوعي',Custom:'⚙️ مخصص'}[r]||''; },
+
+    formatDue(iso) {
+      if (!iso) return '';
+      const d=new Date(iso), now=new Date(), diff=Math.ceil((d-now)/86400000);
+      if (diff<0&&diff>=-1) return '⚠️ منتهية';
+      if (diff<0) return `⚠️ منذ ${Math.abs(diff)} يوم`;
+      if (diff===0) return '⏰ اليوم';
+      if (diff===1) return '📅 غدًا';
+      if (diff<=7) return `📅 ${diff} أيام`;
+      return d.toLocaleDateString('ar-SA',{month:'short',day:'numeric'});
+    },
+  };
+}
+
+/* Inject PWA Manifest */
+(function(){
+  const m={name:'ذاكرة Pocket',short_name:'ذاكرة',description:'RPG Life Tracker',start_url:'./',display:'standalone',orientation:'portrait-primary',background_color:'#0f0a28',theme_color:'#4f46e5',lang:'ar',dir:'rtl',
+    icons:[{src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='80' fill='%234f46e5'/%3E%3Ctext x='80' y='390' font-size='360'%3E📋%3C/text%3E%3C/svg%3E",sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}]};
+  document.head.appendChild(Object.assign(document.createElement('link'),{rel:'manifest',href:URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/manifest+json'}))}));
+})();
+</script>
+</body>
+</html>
